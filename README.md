@@ -8,33 +8,34 @@ An e-commerce order workflow built with **five independent Spring Boot microserv
 ## 🏗️ Architecture
 
 ```mermaid
-sequenceDiagram
-    participant C as Client
-    participant O as Order Service
-    participant K as Kafka
-    participant P as Payment Service
-    participant D as Delivery Service
-    participant N as Notification Service
-    participant L as DLT Service
+flowchart TD
+    Client["Customer / Postman"] -->|"POST /ecommerce/create-order"| Order
 
-    C->>O: POST /ecommerce/create-order
-    O->>O: Save order
-    O->>K: ORDER-CREATED (order-created)
-    K->>P: consume
-    alt Payment succeeds
-        P->>K: payment-success
-        K->>D: consume
-        D->>K: delivery event
-        K->>N: consume, print notification
-    else Payment fails
-        P->>K: payment-failed
-        K->>N: consume, print notification
-    end
-    opt Delivery fails after retries
-        D->>K: payment-success.DLT
-        K->>L: consume
-        L->>K: republish payment-success (updated address)
-    end
+    Order["Order Service<br/>:7070<br/>saves order"] -->|"save order"| DB[("PostgreSQL<br/>orders")]
+    Order -->|"ORDER-CREATED"| T1[("order-created")]
+
+    T1 --> Payment["Payment Service<br/>:8080<br/>simulated payment"]
+
+    Payment -->|"PAYMENT SUCCESS"| T2[("payment-success")]
+    Payment -->|"PAYMENT FAILED"| T3[("payment-failed")]
+
+    T2 --> Delivery["Delivery Service<br/>:9090<br/>looks up address"]
+    Delivery -->|"DELIVERY event"| T4[("delivery")]
+    Delivery -.->|"after retries exhausted"| T5[("payment-success.DLT")]
+
+    T5 -.-> DLT["DLT Service<br/>:9999<br/>recovery"]
+    DLT -.->|"update address"| DB
+    DLT -.->|"republish payment event"| T2
+
+    T3 --> Notification["Notification Service<br/>:6060<br/>console output"]
+    T4 --> Notification
+
+    classDef service fill:#1f2937,stroke:#9ca3af,color:#f9fafb
+    classDef topic fill:#0f172a,stroke:#60a5fa,color:#e5e7eb
+    classDef db fill:#0f172a,stroke:#34d399,color:#e5e7eb
+    class Order,Payment,Delivery,Notification,DLT,Client service
+    class T1,T2,T3,T4,T5 topic
+    class DB db
 ```
 
 ## 🔄 Event Flow
